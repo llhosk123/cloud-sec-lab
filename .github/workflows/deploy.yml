@@ -1,7 +1,7 @@
 name: deploy
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 버튼 실행은 남겨둘게요!
 
 jobs:
   deploy:
@@ -22,14 +22,12 @@ jobs:
       run: |
         cd terraform
         terraform init
-        terraform apply -auto-approve \
-          -var="key_name=${{ secrets.KEY_NAME }}" \
-          -var="existing_sg_id=${{ github.event.inputs.existing_sg_id }}"
+   
+        terraform apply -auto-approve -var="key_name=${{ secrets.KEY_NAME }}"
 
     - name: get ip
       run: |
         cd terraform
-        # output 이름이 public_ip로 설정되어 있어야 합니다.
         terraform output -raw public_ip > ../ip.txt
 
     - name: install ansible
@@ -37,19 +35,19 @@ jobs:
         sudo apt update
         sudo apt install -y ansible
 
-    - name: setup ansible environment
+    - name: setup ansible
       run: |
         IP=$(cat ip.txt)
-        # 1. key.pem을 ansible 폴더 안에 생성 (경로 단순화)
-        echo "${{ secrets.SSH_KEY }}" > ansible/key.pem
-        chmod 600 ansible/key.pem
+        # 키 파일을 ansible 폴더 안이 아니라 루트에 생성 (원래 하시던 방식)
+        echo "${{ secrets.SSH_KEY }}" > key.pem
+        chmod 600 key.pem
         
-        # 2. inventory.ini 생성 (ansible/key.pem을 가리키도록)
+        # 인벤토리 생성 (상위 폴더에 있는 key.pem 참조)
         echo "[server]" > ansible/inventory.ini
-        echo "$IP ansible_user=ubuntu ansible_ssh_private_key_file=key.pem" >> ansible/inventory.ini
+        echo "$IP ansible_user=ubuntu ansible_ssh_private_key_file=../key.pem" >> ansible/inventory.ini
 
     - name: ansible run
       run: |
-        # 중요: ansible 폴더로 들어가서 실행해야 ansible.cfg를 읽습니다.
-        cd ansible
-        ansible-playbook -i inventory.ini playbook.yml
+        # 호스트 키 검사를 명령어 한 줄로 해결 (ansible.cfg 없어도 됨)
+        export ANSIBLE_HOST_KEY_CHECKING=False
+        ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
