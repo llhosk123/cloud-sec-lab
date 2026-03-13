@@ -3,12 +3,26 @@
 
   tasks:
 
+    - name: apt update
+      apt:
+        update_cache: yes
+
     - name: install curl
       apt:
         name: curl
         state: present
-        update_cache: yes
 
+    - name: make swap
+      shell: |
+        fallocate -l 1G /swapfile || true
+        chmod 600 /swapfile
+        mkswap /swapfile || true
+        swapon /swapfile || true
+
+    - name: disable ufw
+      shell: |
+        systemctl stop ufw || true
+        systemctl disable ufw || true
 
     - name: install k3s
       shell: |
@@ -16,17 +30,19 @@
       args:
         executable: /bin/bash
 
-
     - name: wait k3s
-      shell: |
-        sleep 10
+      shell: sleep 40
 
-
-    - name: check node
-      shell: |
-        sudo k3s kubectl get nodes
-      register: result
-
+    - name: check service
+      shell: systemctl status k3s
+      register: svc
 
     - debug:
-        var: result.stdout
+        var: svc.stdout
+
+    - name: check nodes
+      shell: sudo k3s kubectl get nodes
+      register: nodes
+
+    - debug:
+        var: nodes.stdout
