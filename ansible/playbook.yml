@@ -33,16 +33,58 @@
     - name: wait k3s
       shell: sleep 40
 
-    - name: check service
-      shell: systemctl status k3s
-      register: svc
-
-    - debug:
-        var: svc.stdout
-
     - name: check nodes
       shell: sudo k3s kubectl get nodes
       register: nodes
 
     - debug:
         var: nodes.stdout
+
+
+    # ✅ k8s 폴더 생성
+
+    - name: make k8s dir
+      file:
+        path: /home/ubuntu/k8s
+        state: directory
+        owner: ubuntu
+
+
+    # ✅ yaml 복사
+
+    - name: copy web yaml
+      copy:
+        src: k8s/web.yaml
+        dest: /home/ubuntu/k8s/web.yaml
+
+    - name: copy svc yaml
+      copy:
+        src: k8s/svc.yaml
+        dest: /home/ubuntu/k8s/svc.yaml
+
+    - name: copy ingress yaml
+      copy:
+        src: k8s/ingress.yaml
+        dest: /home/ubuntu/k8s/ingress.yaml
+
+
+    # ✅ ingress controller 설치
+
+    - name: install ingress controller
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+
+    - name: wait ingress
+      shell: sleep 40
+
+
+    # ✅ k8s 적용
+
+    - name: apply web
+      shell: kubectl apply -f /home/ubuntu/k8s/web.yaml
+
+    - name: apply svc
+      shell: kubectl apply -f /home/ubuntu/k8s/svc.yaml
+
+    - name: apply ingress
+      shell: kubectl apply -f /home/ubuntu/k8s/ingress.yaml
