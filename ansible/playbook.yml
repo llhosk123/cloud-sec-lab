@@ -1,18 +1,32 @@
 - hosts: server
-  become: true
+  become: yes
 
   tasks:
 
-  - name: install k3s
-    shell: |
-      curl -sfL https://get.k3s.io | sh -s - \
-        --disable traefik \
-        --disable servicelb
+    - name: install curl
+      apt:
+        name: curl
+        state: present
+        update_cache: yes
 
-  - name: wait
-    pause:
-      seconds: 20
 
-  - name: install ingress
-    shell: |
-      kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+    - name: install k3s
+      shell: |
+        curl -sfL https://get.k3s.io | sh -
+      args:
+        executable: /bin/bash
+
+
+    - name: wait k3s
+      shell: |
+        sleep 10
+
+
+    - name: check node
+      shell: |
+        sudo k3s kubectl get nodes
+      register: result
+
+
+    - debug:
+        var: result.stdout

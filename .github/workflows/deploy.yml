@@ -2,6 +2,7 @@ name: deploy
 
 on:
   workflow_dispatch:
+
 jobs:
 
   deploy:
@@ -26,3 +27,33 @@ jobs:
         terraform init
         terraform apply -auto-approve \
           -var="key_name=${{ secrets.KEY_NAME }}"
+
+    - name: get ip
+      run: |
+        cd terraform
+        terraform output -raw public_ip > ip.txt
+
+    - name: show ip
+      run: cat terraform/ip.txt
+
+    - name: install ansible
+      run: |
+        sudo apt update
+        sudo apt install -y ansible
+
+    - name: make inventory
+      run: |
+        IP=$(cat terraform/ip.txt)
+
+        echo "[server]" > ansible/inventory.ini
+        echo "$IP ansible_user=ubuntu ansible_ssh_private_key_file=key.pem" >> ansible/inventory.ini
+
+
+    - name: write key
+      run: |
+        echo "${{ secrets.SSH_KEY }}" > key.pem
+        chmod 600 key.pem
+
+    - name: ansible run
+      run: |
+        ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
