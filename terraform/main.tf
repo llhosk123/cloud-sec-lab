@@ -16,7 +16,19 @@ resource "aws_instance" "lab" {
   aws_security_group.lab.id
   ]
 
-  user_data = file("../scripts/install.sh")
+user_data = <<EOF
+#!/bin/bash
+
+apt update -y
+apt install -y git
+
+cd /home/ubuntu
+
+git clone https://github.com/YOUR_ID/cloud-sec-lab.git
+
+bash cloud-sec-lab/scripts/install.sh
+
+EOF
 
   tags = {
     Name = "lab-instance"
