@@ -1,7 +1,6 @@
 resource "aws_security_group" "lab" {
-  count = var.existing_sg_id == "" ? 1 : 0
 
-  name        = "lab-sg"
+  name_prefix = "lab-sg-"
   description = "Security group for cloud-sec-lab"
 
   ingress {
@@ -11,7 +10,19 @@ resource "aws_security_group" "lab" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # ... 나머지 포트 설정 (80, 30000-32767) ...
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 30000
+    to_port     = 32767
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   egress {
     from_port   = 0
@@ -19,4 +30,5 @@ resource "aws_security_group" "lab" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
 }
