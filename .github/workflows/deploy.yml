@@ -1,30 +1,41 @@
 name: deploy
 
 on:
-  push:
-    branches:
-      - main
+  # push 설정을 삭제하거나 주석 처리하여 '지멋대로' 실행되는 걸 막습니다.
+  # push:
+  #   branches:
+  #     - main
+  
+  # 수동 실행 버튼을 활성화합니다.
+  workflow_dispatch:
+    inputs:
+      existing_sg_id:
+        description: '이미 존재하는 보안 그룹 ID (없으면 비워두세요)'
+        required: false
+        default: ''
 
 jobs:
-
   deploy:
-
     runs-on: ubuntu-latest
 
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4 # 최신 버전 v4 권장
 
-    - uses: actions/checkout@v3
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
 
-    - uses: hashicorp/setup-terraform@v3
-
-    - name: aws login
+    - name: AWS login
       run: |
         aws configure set aws_access_key_id ${{ secrets.AWS_KEY }}
         aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET }}
         aws configure set region ap-northeast-2
 
-    - name: terraform
+    - name: Terraform Deploy
       run: |
         cd terraform
         terraform init
-        terraform apply -auto-approve -var="key_name=${{ secrets.KEY_NAME }}"
+        # 입력받은 sg_id가 있으면 변수로 전달, 없으면 빈 값으로 전달
+        terraform apply -auto-approve \
+          -var="key_name=${{ secrets.KEY_NAME }}" \
+          -var="existing_sg_id=${{ github.event.inputs.existing_sg_id }}"
