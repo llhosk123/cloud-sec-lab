@@ -13,7 +13,7 @@ resource "aws_instance" "lab" {
   key_name      = var.key_name
 
   vpc_security_group_ids = [
-    var.existing_sg_id != "" ? var.existing_sg_id : aws_security_group.lab[0].id
+  aws_security_group.lab.id
   ]
 
   user_data = file("../scripts/install.sh")
