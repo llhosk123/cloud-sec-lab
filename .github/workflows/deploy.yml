@@ -1,16 +1,19 @@
 name: deploy
 
 on:
-  workflow_dispatch: # 버튼 실행은 남겨둘게요!
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
+
     - uses: actions/checkout@v4
 
+
     - uses: hashicorp/setup-terraform@v3
+
 
     - name: AWS login
       run: |
@@ -18,36 +21,41 @@ jobs:
         aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET }}
         aws configure set region ap-northeast-2
 
+
     - name: terraform
       run: |
         cd terraform
         terraform init
-   
-        terraform apply -auto-approve -var="key_name=${{ secrets.KEY_NAME }}"
+        terraform apply -auto-approve \
+          -var="key_name=${{ secrets.KEY_NAME }}"
+
 
     - name: get ip
       run: |
         cd terraform
         terraform output -raw public_ip > ../ip.txt
 
+
     - name: install ansible
       run: |
         sudo apt update
         sudo apt install -y ansible
 
+
     - name: setup ansible
       run: |
         IP=$(cat ip.txt)
-        # 키 파일을 ansible 폴더 안이 아니라 루트에 생성 (원래 하시던 방식)
+
+        # key 생성
         echo "${{ secrets.SSH_KEY }}" > key.pem
         chmod 600 key.pem
-        
-        # 인벤토리 생성 (상위 폴더에 있는 key.pem 참조)
+
+        # inventory 생성
         echo "[server]" > ansible/inventory.ini
-        echo "$IP ansible_user=ubuntu ansible_ssh_private_key_file=../key.pem" >> ansible/inventory.ini
+        echo "$IP ansible_user=ubuntu ansible_ssh_private_key_file=key.pem" >> ansible/inventory.ini
+
 
     - name: ansible run
       run: |
-        # 호스트 키 검사를 명령어 한 줄로 해결 (ansible.cfg 없어도 됨)
         export ANSIBLE_HOST_KEY_CHECKING=False
         ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
