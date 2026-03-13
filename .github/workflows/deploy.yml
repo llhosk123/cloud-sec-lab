@@ -4,13 +4,10 @@ on:
   workflow_dispatch:
 
 jobs:
-
   deploy:
-
     runs-on: ubuntu-latest
 
     steps:
-
     - uses: actions/checkout@v4
 
     - uses: hashicorp/setup-terraform@v3
@@ -26,34 +23,33 @@ jobs:
         cd terraform
         terraform init
         terraform apply -auto-approve \
-          -var="key_name=${{ secrets.KEY_NAME }}"
+          -var="key_name=${{ secrets.KEY_NAME }}" \
+          -var="existing_sg_id=${{ github.event.inputs.existing_sg_id }}"
 
     - name: get ip
       run: |
         cd terraform
-        terraform output -raw public_ip > ip.txt
-
-    - name: show ip
-      run: cat terraform/ip.txt
+        # output 이름이 public_ip로 설정되어 있어야 합니다.
+        terraform output -raw public_ip > ../ip.txt
 
     - name: install ansible
       run: |
         sudo apt update
         sudo apt install -y ansible
 
-    - name: make inventory
+    - name: setup ansible environment
       run: |
-        IP=$(cat terraform/ip.txt)
-
+        IP=$(cat ip.txt)
+        # 1. key.pem을 ansible 폴더 안에 생성 (경로 단순화)
+        echo "${{ secrets.SSH_KEY }}" > ansible/key.pem
+        chmod 600 ansible/key.pem
+        
+        # 2. inventory.ini 생성 (ansible/key.pem을 가리키도록)
         echo "[server]" > ansible/inventory.ini
         echo "$IP ansible_user=ubuntu ansible_ssh_private_key_file=key.pem" >> ansible/inventory.ini
 
-
-    - name: write key
-      run: |
-        echo "${{ secrets.SSH_KEY }}" > key.pem
-        chmod 600 key.pem
-
     - name: ansible run
       run: |
-        ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
+        # 중요: ansible 폴더로 들어가서 실행해야 ansible.cfg를 읽습니다.
+        cd ansible
+        ansible-playbook -i inventory.ini playbook.yml
