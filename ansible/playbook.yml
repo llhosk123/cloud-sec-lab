@@ -91,6 +91,7 @@
         kubectl -n ingress-nginx create configmap ingress-nginx-controller \
           --from-literal=enable-modsecurity=true \
           --from-literal=enable-owasp-modsecurity-crs=true \
+          --from-literal=modsecurity-snippet="SecRuleEngine On" \
           -o yaml --dry-run=client | kubectl apply -f -
     
     # webhook 문제 방지
