@@ -17,6 +17,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: web-svc
+            name: web
             port:
               number: 80
