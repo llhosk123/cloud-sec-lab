@@ -77,10 +77,6 @@
       shell: |
         kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
 
-    - name: enable waf
-      shell: >
-        kubectl -n ingress-nginx patch deployment ingress-nginx-controller
-        -p '{"spec":{"template":{"spec":{"containers":[{"name":"controller","args":["/nginx-ingress-controller","--enable-modsecurity","--enable-owasp-modsecurity-crs"]}]}}}}'
 
     # 안정 대기 (kubectl wait 쓰지마)
 
