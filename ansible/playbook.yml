@@ -26,8 +26,8 @@
 
     - name: uninstall k3s
       shell: |
-        /usr/local/bin/k3s-uninstall.sh || true    
-    
+        /usr/local/bin/k3s-uninstall.sh || true
+
     - name: install k3s
       shell: |
         curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
@@ -73,17 +73,27 @@
 
 
     # ingress install
+
     - name: install ingress controller
       shell: |
         kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
 
 
-    # 안정 대기 (kubectl wait 쓰지마)
+    # wait ingress
 
     - name: wait ingress
       shell: sleep 120
-      async: 200
-      poll: 0
+
+
+    # ✅ modsecurity enable 추가
+
+    - name: enable modsecurity
+      shell: |
+        kubectl -n ingress-nginx patch deployment ingress-nginx-controller \
+        -p '{"spec":{"template":{"spec":{"containers":[{"name":"controller","args":["/nginx-ingress-controller","--enable-modsecurity","--enable-owasp-modsecurity-crs"]}]}}}}'
+
+
+    # webhook 문제 방지
 
     - name: delete admission webhook
       shell: |
