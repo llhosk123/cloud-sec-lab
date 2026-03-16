@@ -78,14 +78,28 @@
       shell: |
         kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
 
-
-    # wait ingress
-
     - name: wait ingress
+      shell: sleep 60
+
+
+    # ✅ hostNetwork 적용 → 80포트 직접 사용
+
+    - name: patch ingress to hostNetwork
+      shell: |
+        kubectl patch deployment ingress-nginx-controller \
+          -n ingress-nginx \
+          --type=json \
+          -p='[
+            {"op":"add","path":"/spec/template/spec/hostNetwork","value":true},
+            {"op":"add","path":"/spec/template/spec/dnsPolicy","value":"ClusterFirstWithHostNet"}
+          ]'
+
+    - name: wait ingress restart
       shell: sleep 120
 
 
-    # ✅ modsecurity enable 추가
+    # ✅ modsecurity enable
+
     - name: enable modsecurity configmap
       shell: |
         kubectl -n ingress-nginx create configmap ingress-nginx-controller \
@@ -93,7 +107,8 @@
           --from-literal=enable-owasp-modsecurity-crs=true \
           --from-literal=modsecurity-snippet="SecRuleEngine On" \
           -o yaml --dry-run=client | kubectl apply -f -
-    
+
+
     # webhook 문제 방지
 
     - name: delete admission webhook
@@ -101,7 +116,7 @@
         kubectl delete ValidatingWebhookConfiguration ingress-nginx-admission || true
 
 
-    # apply
+    # apply web
 
     - name: apply web
       shell: kubectl apply -f /home/ubuntu/k8s/web.yaml
@@ -111,3 +126,39 @@
 
     - name: apply ingress
       shell: kubectl apply -f /home/ubuntu/k8s/ingress.yaml
+
+
+
+# =========================
+# IDS (Snort)
+# =========================
+
+- hosts: ids
+  become: yes
+
+  tasks:
+
+    - name: apt update
+      apt:
+        update_cache: yes
+
+    - name: install snort (noninteractive)
+      shell: |
+        DEBIAN_FRONTEND=noninteractive apt-get install -y snort
+
+    - name: copy rules
+      copy:
+        src: snort/local.rules
+        dest: /etc/snort/rules/local.rules
+
+    - name: enable local rules
+      lineinfile:
+        path: /etc/snort/snort.conf
+        regexp: '^# include \$RULE_PATH/local.rules'
+        line: 'include $RULE_PATH/local.rules'
+
+    - name: run snort
+      shell: |
+        pkill snort || true
+        IFACE=$(ip route | grep default | awk '{print $5}')
+        snort -A console -q -c /etc/snort/snort.conf -i $IFACE &
