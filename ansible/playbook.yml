@@ -86,13 +86,13 @@
 
 
     # ✅ modsecurity enable 추가
-
-    - name: enable modsecurity
+    - name: enable modsecurity configmap
       shell: |
-        kubectl -n ingress-nginx patch deployment ingress-nginx-controller \
-        -p '{"spec":{"template":{"spec":{"containers":[{"name":"controller","args":["/nginx-ingress-controller","--enable-modsecurity","--enable-owasp-modsecurity-crs"]}]}}}}'
-
-
+        kubectl -n ingress-nginx create configmap ingress-nginx-controller \
+          --from-literal=enable-modsecurity=true \
+          --from-literal=enable-owasp-modsecurity-crs=true \
+          -o yaml --dry-run=client | kubectl apply -f -
+    
     # webhook 문제 방지
 
     - name: delete admission webhook
