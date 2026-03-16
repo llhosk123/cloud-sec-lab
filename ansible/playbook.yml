@@ -24,9 +24,13 @@
         systemctl stop ufw || true
         systemctl disable ufw || true
 
+    - name: uninstall k3s
+      shell: |
+        /usr/local/bin/k3s-uninstall.sh || true    
+    
     - name: install k3s
       shell: |
-        curl -sfL https://get.k3s.io | sh -
+        curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
       args:
         executable: /bin/bash
 
