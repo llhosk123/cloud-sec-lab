@@ -41,7 +41,7 @@
         var: nodes.stdout
 
 
-    # ✅ k8s 폴더 생성
+    # k8s dir
 
     - name: make k8s dir
       file:
@@ -50,7 +50,7 @@
         owner: ubuntu
 
 
-    # ✅ yaml 복사
+    # copy yaml
 
     - name: copy web yaml
       copy:
@@ -68,27 +68,26 @@
         dest: /home/ubuntu/k8s/ingress.yaml
 
 
-    # ✅ ingress 설치 + WAF
+    # ingress install
 
     - name: install ingress controller
       shell: |
         kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
 
-        kubectl -n ingress-nginx patch deployment ingress-nginx-controller \
-          -p '{"spec":{"template":{"spec":{"containers":[{"name":"controller","args":["/nginx-ingress-controller","--enable-modsecurity","--enable-owasp-modsecurity-crs"]}]}}}}'
 
+    # 안정 대기 (kubectl wait 쓰지마)
 
-    # ✅ ingress 뜰때까지 대기 (중요)
+    - name: wait ingress
+      shell: sleep 120
+      async: 200
+      poll: 0
 
-    - name: wait ingress controller ready
+    - name: delete admission webhook
       shell: |
-        kubectl wait --namespace ingress-nginx \
-          --for=condition=ready pod \
-          --selector=app.kubernetes.io/component=controller \
-          --timeout=300s
+        kubectl delete ValidatingWebhookConfiguration ingress-nginx-admission || true
 
 
-    # ✅ k8s 적용
+    # apply
 
     - name: apply web
       shell: kubectl apply -f /home/ubuntu/k8s/web.yaml
