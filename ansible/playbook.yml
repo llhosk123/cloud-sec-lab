@@ -68,12 +68,25 @@
         dest: /home/ubuntu/k8s/ingress.yaml
 
 
+    # ✅ ingress 설치 + WAF
+
     - name: install ingress controller
       shell: |
         kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 
         kubectl -n ingress-nginx patch deployment ingress-nginx-controller \
           -p '{"spec":{"template":{"spec":{"containers":[{"name":"controller","args":["/nginx-ingress-controller","--enable-modsecurity","--enable-owasp-modsecurity-crs"]}]}}}}'
+
+
+    # ✅ ingress 뜰때까지 대기 (중요)
+
+    - name: wait ingress controller ready
+      shell: |
+        kubectl wait --namespace ingress-nginx \
+          --for=condition=ready pod \
+          --selector=app.kubernetes.io/component=controller \
+          --timeout=180s
+
 
     # ✅ k8s 적용
 
