@@ -11,13 +11,12 @@
         state: present
         update_cache: yes
 
-# Server: WAF & K3s 설치 (Traefik 비활성화 버전)
+# Server: WAF & K3s 설치
 - name: Setup WAF on Server
   hosts: server
   become: yes
   tasks:
     - name: Install K3s without Traefik
-      # INSTALL_K3S_EXEC 옵션으로 Traefik을 아예 설치하지 않습니다.
       shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
       args:
         creates: /usr/local/bin/k3s
@@ -36,31 +35,32 @@
         export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
         helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
         helm repo update
-        # 80/443 포트를 Nginx가 단독으로 사용합니다.
         helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
           --namespace ingress-nginx --create-namespace \
           --set controller.config.enable-modsecurity="true" \
           --set controller.config.enable-owasp-modsecurity-crs="true" \
           --set controller.config.modsecurity-snippet="SecRuleEngine On\nSecAuditEngine RelevantOnly\nSecAuditLog /var/log/modsec_audit.log"
 
+    - name: Wait for Ingress Controller to be ready
+      # 웹훅 서비스가 준비될 때까지 30초 정도 기다려줍니다. (매우 중요)
+      pause:
+        seconds: 30
+
     - name: Deploy Test Web Application
-      # 인프라만 있고 앱이 없으면 페이지가 안 뜨므로, 테스트용 앱을 즉시 띄웁니다.
       shell: |
         export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-        # 1. 테스트용 앱 배포
-        kubectl create deployment web-test --image=nginxdemos/hello:plain-text --replicate=1 || true
+        # 1. 테스트용 앱 배포 (오타 수정: --replicate -> --replicas)
+        kubectl create deployment web-test --image=nginxdemos/hello:plain-text --replicas=1 || true
         kubectl expose deployment web-test --port=80 || true
         
-        # 2. WAF가 적용된 Ingress 설정 생성
+        # 2. WAF가 적용된 Ingress 설정 생성 (최신 문법 반영: ingressClassName)
         cat <<EOF | kubectl apply -f -
         apiVersion: networking.k8s.io/v1
         kind: Ingress
         metadata:
           name: security-test-ingress
-          annotations:
-            kubernetes.io/ingress.class: nginx
-            nginx.ingress.kubernetes.io/enable-modsecurity: "true"
         spec:
+          ingressClassName: nginx
           rules:
           - http:
               paths:
@@ -90,7 +90,6 @@
         create: yes
 
     - name: Start Snort Service
-      # Snort가 이미 돌고 있을 수 있으므로 pkill 후 재실행
       shell: |
         pkill snort || true
         nohup snort -A console -q -c /etc/snort/snort.conf -i eth0 &
