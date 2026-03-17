@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: modsec-custom-rules
+  namespace: ingress-nginx
+data:
+  custom-rules.conf: |
+    # 테스트용: URL에 "attack-test"가 포함되면 403 차단
+    SecRule REQUEST_URI "@contains attack-test" \
+      "id:10001,phase:1,deny,status:403,log,msg:'Custom Attack Pattern Detected'"

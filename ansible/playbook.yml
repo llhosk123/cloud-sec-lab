@@ -1,97 +1,65 @@
-- hosts: server
+# ansible/playbook.yml
+---
+- name: Infrastructure Security Setup
+  hosts: all
   become: yes
-
   tasks:
+    - name: Wait for cloud-init to finish
+      shell: cloud-init status --wait
+    - name: Update apt and install dependencies
+      apt:
+        name: [curl, git, python3-pip, unzip]
+        state: present
+        update_cache: yes
 
-  - name: swap off
-    shell: swapoff -a
-
-  - name: install curl
-    apt:
-      name: curl
-      state: present
-      update_cache: yes
-
-  # -----------------
-  # k3s 설치
-  # -----------------
-
-  - name: install k3s
-    shell: |
-      curl -sfL https://get.k3s.io | sh -
-
-  - name: kubeconfig 권한
-    shell: |
-      chmod 644 /etc/rancher/k3s/k3s.yaml
-
-  - name: kubectl 설정
-    shell: |
-      mkdir -p /home/ubuntu/.kube
-      cp /etc/rancher/k3s/k3s.yaml /home/ubuntu/.kube/config
-      chown ubuntu:ubuntu /home/ubuntu/.kube/config
-
-  # -----------------
-  # helm 설치
-  # -----------------
-
-  - name: install helm
-    shell: |
-      curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-  # -----------------
-  # ingress-nginx + WAF
-  # -----------------
-
-  - name: add ingress repo
-    shell: |
-      helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-      helm repo update
-
-  - name: install ingress nginx with waf
-    shell: |
-      helm install ingress-nginx ingress-nginx/ingress-nginx \
-        --set controller.hostNetwork=true \
-        --set controller.enableModsecurity=true \
-        --set controller.enableOwaspModsecurityCrs=true
-
-  # -----------------
-  # web deploy
-  # -----------------
-
-  - name: web deploy
-    copy:
-      src: k8s/web.yaml
-      dest: /home/ubuntu/web.yaml
-
-  - name: apply web
-    shell: kubectl apply -f /home/ubuntu/web.yaml
-
-
-
-# =========================
-# IDS 서버
-# =========================
-
-- hosts: ids
+# Server: WAF & K3s 설치
+- name: Setup WAF on Server
+  hosts: server
   become: yes
-
   tasks:
+    - name: Install K3s
+      shell: curl -sfL https://get.k3s.io | sh -
+      args:
+        creates: /usr/local/bin/k3s
 
-  - name: apt update
-    apt:
-      update_cache: yes
+    - name: Wait for Kubeconfig
+      wait_for:
+        path: /etc/rancher/k3s/k3s.yaml
 
-  - name: install snort
-    apt:
-      name: snort
-      state: present
+    - name: Install Helm
+      shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      args:
+        creates: /usr/local/bin/helm
 
-  - name: make log dir
-    file:
-      path: /var/log/snort
-      state: directory
-      mode: 0777
+    - name: Deploy Nginx Ingress with ModSecurity
+      shell: |
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+        helm repo update
+        helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+          --namespace ingress-nginx --create-namespace \
+          --set controller.config.enable-modsecurity="true" \
+          --set controller.config.enable-owasp-modsecurity-crs="true" \
+          --set controller.config.modsecurity-snippet="SecRuleEngine On\nSecAuditEngine RelevantOnly\nSecAuditLog /var/log/modsec_audit.log"
 
-  - name: run snort
-    shell: |
-      nohup snort -A fast -c /etc/snort/snort.conf -i ens5 -l /var/log/snort &
+# IDS: Snort 설치 및 룰 설정
+- name: Setup Snort IDS
+  hosts: ids
+  become: yes
+  tasks:
+    - name: Install Snort
+      apt:
+        name: snort
+        state: present
+
+    - name: Configure Snort local rules (Security Test)
+      lineinfile:
+        path: /etc/snort/rules/local.rules
+        # 테스트용: 'attack-test' 문자열이 포함된 패킷 탐지
+        line: 'alert tcp any any -> $HOME_NET 80 (msg:"IDS Detection Test"; content:"attack-test"; sid:1000001; rev:1;)'
+        create: yes
+
+    - name: Start Snort Service
+      shell: |
+        # 인터페이스 이름은 t3.small 기준 eth0가 일반적입니다.
+        nohup snort -A console -q -c /etc/snort/snort.conf -i eth0 &

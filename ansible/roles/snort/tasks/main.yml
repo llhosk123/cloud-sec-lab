@@ -1,0 +1,17 @@
+- name: Snort 패키지 설치
+  apt:
+    name: snort
+    state: present
+    update_cache: yes
+
+- name: Snort 커스텀 룰셋 배포 (Github의 파일을 서버로 복사)
+  template:
+    src: snort.rules.j2
+    dest: /etc/snort/rules/local.rules
+  notify: Restart Snort
+
+- name: Snort 서비스 실행
+  service:
+    name: snort
+    state: started
+    enabled: yes

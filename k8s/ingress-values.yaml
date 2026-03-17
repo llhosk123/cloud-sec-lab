@@ -1,0 +1,19 @@
+controller:
+  config:
+    enable-modsecurity: "true"
+    enable-owasp-modsecurity-crs: "true" # 기본 보안 룰셋 활성화
+    modsecurity-snippet: |
+      SecRuleEngine On
+      SecAuditEngine RelevantOnly
+      SecAuditLog /var/log/modsec_audit.log
+      Include /etc/nginx/modsec/custom-rules.conf
+
+  # 커스텀 룰(ConfigMap)을 파일 형태로 마운트
+  extraVolumes:
+    - name: modsec-custom-rules-volume
+      configMap:
+        name: modsec-custom-rules
+  extraVolumeMounts:
+    - name: modsec-custom-rules-volume
+      mountPath: /etc/nginx/modsec/custom-rules.conf
+      subPath: custom-rules.conf

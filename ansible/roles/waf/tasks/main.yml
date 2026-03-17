@@ -1,0 +1,19 @@
+- name: Helm 저장소 추가
+  kubernetes.core.helm_repository:
+    name: ingress-nginx
+    repo_url: "https://kubernetes.github.io/ingress-nginx"
+
+- name: Nginx Ingress Controller 배포 (WAF 활성화)
+  kubernetes.core.helm:
+    name: ingress-nginx
+    chart_ref: ingress-nginx/ingress-nginx
+    release_namespace: ingress-nginx
+    create_namespace: true
+    values:
+      controller:
+        config:
+          enable-modsecurity: "true"
+          enable-owasp-modsecurity-crs: "true"
+          modsecurity-snippet: |
+            SecRuleEngine On
+            Include /etc/nginx/modsec/custom-rules.conf
