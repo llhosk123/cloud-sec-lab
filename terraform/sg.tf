@@ -1,4 +1,4 @@
-resource "aws_security_group" "lab" {
+resource "aws_security_group" "main" {
 
   name_prefix = "lab-sg-"
 

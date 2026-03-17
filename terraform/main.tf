@@ -12,7 +12,7 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-resource "aws_instance" "lab" {
+resource "aws_instance" "server" {
 
   ami = data.aws_ami.ubuntu.id
   instance_type = "t3.micro"
