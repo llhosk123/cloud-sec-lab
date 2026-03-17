@@ -11,73 +11,44 @@
         state: present
         update_cache: yes
 
-# Server: WAF & K3s 설치
+# Server: WAF & K3s 설치 (t3.small 최적화)
 - name: Setup WAF on Server
   hosts: server
   become: yes
   tasks:
-    - name: Swap 메모리 설정 (t3.small 안정성 확보)
+    - name: Swap 메모리 설정
       shell: |
-        fallocate -l 1G /swapfile || true
-        chmod 600 /swapfile
-        mkswap /swapfile || true
-        swapon /swapfile || true
+        if [ ! -f /swapfile ]; then
+          fallocate -l 1G /swapfile
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+        fi
+      args:
+        creates: /swapfile
 
-    - name: K3s 설치 (Traefik 비활성화)
+    - name: K3s 설치
       shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
       args:
         creates: /usr/local/bin/k3s
 
     - name: Kubeconfig 권한 설정
-      shell: chmod 644 /etc/rancher/k3s/k3s.yaml
+      file:
+        path: /etc/rancher/k3s/k3s.yaml
+        mode: '0644'
 
-    - name: Nginx Ingress Controller 설치 (Manifest 방식)
+    - name: Nginx Ingress Controller 및 WAF 설정 적용
       shell: |
         kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
-
-    - name: 인그레스 준비 대기
-      pause:
-        seconds: 30
-
-    - name: ✅ 핵심 - Webhook 삭제 및 HostNetwork 패치
-      # 80포트를 직접 사용하게 하고, 에러를 유발하는 웹훅을 제거합니다.
-      shell: |
+        sleep 20
         kubectl delete ValidatingWebhookConfiguration ingress-nginx-admission || true
         kubectl patch deployment ingress-nginx-controller -n ingress-nginx --type=json \
           -p='[{"op":"add","path":"/spec/template/spec/hostNetwork","value":true}]'
-
-    - name: WAF(ModSecurity) 설정 적용
-      # ConfigMap을 통해 WAF 엔진을 활성화합니다.
-      shell: |
+        
         kubectl -n ingress-nginx patch configmap ingress-nginx-controller \
           --patch '{"data": {"enable-modsecurity": "true", "enable-owasp-modsecurity-crs": "true", "modsecurity-snippet": "SecRuleEngine On\nSecAuditEngine RelevantOnly\nSecAuditLog /var/log/modsec_audit.log"}}'
 
-    - name: 테스트용 웹 앱 및 Ingress 배포
-      shell: |
-        # 1. 앱 생성
-        kubectl create deployment web-test --image=nginxdemos/hello:plain-text --replicas=1 || true
-        kubectl expose deployment web-test --port=80 || true
-        # 2. 인그레스 설정
-        cat <<EOF | kubectl apply -f -
-        apiVersion: networking.k8s.io/v1
-        kind: Ingress
-        metadata:
-          name: security-test-ingress
-        spec:
-          ingressClassName: nginx
-          rules:
-          - http:
-              paths:
-              - path: /
-                pathType: Prefix
-                backend:
-                  service:
-                    name: web-test
-                    port:
-                      number: 80
-        EOF
-
-# IDS: Snort 설치 (이전과 동일)
+# IDS: Snort 설치 및 룰 관리 자동화
 - name: Setup Snort IDS
   hosts: ids
   become: yes
@@ -86,12 +57,34 @@
       apt:
         name: snort
         state: present
-    - name: Configure Snort local rules
-      lineinfile:
-        path: /etc/snort/rules/local.rules
-        line: 'alert tcp any any -> $HOME_NET 80 (msg:"IDS Detection Test"; content:"attack-test"; sid:1000001; rev:1;)'
-        create: yes
-    - name: Start Snort Service
+        update_cache: yes
+
+    - name: 인터페이스 이름 자동 감지
+      set_fact:
+        ansible_interface_name: "{{ ansible_default_ipv4.interface }}"
+
+    - name: Snort 커스텀 룰 배포 (템플릿 방식)
+      template:
+        src: snort.rules.j2  # 이 파일이 ansible/templates/ 안에 있어야 함
+        dest: /etc/snort/rules/local.rules
+      register: rule_update
+    
+    - name: 🔍 Snort 룰 문법 검사 (오타 있으면 배포 중단)
+      shell: "snort -T -c /etc/snort/snort.conf"
+      when: rule_update.changed
+
+    - name: 로그 디렉토리 권한 설정
+      file:
+        path: /var/log/snort
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Snort 실행/재시작
       shell: |
         pkill snort || true
-        nohup snort -A console -q -c /etc/snort/snort.conf -i eth0 &
+        # -A fast: 파일에 로그 기록 (Kafka 전송용)
+        nohup snort -q -A fast -c /etc/snort/snort.conf -i {{ ansible_interface_name }} -l /var/log/snort &
+      # 룰이 바뀌었거나 프로세스가 없을 때만 실행
+      when: rule_update.changed or (ansible_facts.services is not defined)
