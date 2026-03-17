@@ -3,134 +3,73 @@
 
   tasks:
 
-    - name: apt update
-      apt:
-        update_cache: yes
+  - name: swap off
+    shell: swapoff -a
 
-    - name: install curl
-      apt:
-        name: curl
-        state: present
+  - name: install curl
+    apt:
+      name: curl
+      state: present
+      update_cache: yes
 
-    - name: make swap
-      shell: |
-        fallocate -l 1G /swapfile || true
-        chmod 600 /swapfile
-        mkswap /swapfile || true
-        swapon /swapfile || true
+  # -----------------
+  # k3s 설치
+  # -----------------
 
-    - name: disable ufw
-      shell: |
-        systemctl stop ufw || true
-        systemctl disable ufw || true
+  - name: install k3s
+    shell: |
+      curl -sfL https://get.k3s.io | sh -
 
-    - name: uninstall k3s
-      shell: |
-        /usr/local/bin/k3s-uninstall.sh || true
+  - name: kubeconfig 권한
+    shell: |
+      chmod 644 /etc/rancher/k3s/k3s.yaml
 
-    - name: install k3s
-      shell: |
-        curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
-      args:
-        executable: /bin/bash
+  - name: kubectl 설정
+    shell: |
+      mkdir -p /home/ubuntu/.kube
+      cp /etc/rancher/k3s/k3s.yaml /home/ubuntu/.kube/config
+      chown ubuntu:ubuntu /home/ubuntu/.kube/config
 
-    - name: wait k3s
-      shell: sleep 40
+  # -----------------
+  # helm 설치
+  # -----------------
 
-    - name: check nodes
-      shell: sudo k3s kubectl get nodes
-      register: nodes
+  - name: install helm
+    shell: |
+      curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-    - debug:
-        var: nodes.stdout
+  # -----------------
+  # ingress-nginx + WAF
+  # -----------------
 
+  - name: add ingress repo
+    shell: |
+      helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+      helm repo update
 
-    # k8s dir
+  - name: install ingress nginx with waf
+    shell: |
+      helm install ingress-nginx ingress-nginx/ingress-nginx \
+        --set controller.hostNetwork=true \
+        --set controller.enableModsecurity=true \
+        --set controller.enableOwaspModsecurityCrs=true
 
-    - name: make k8s dir
-      file:
-        path: /home/ubuntu/k8s
-        state: directory
-        owner: ubuntu
+  # -----------------
+  # web deploy
+  # -----------------
 
+  - name: web deploy
+    copy:
+      src: k8s/web.yaml
+      dest: /home/ubuntu/web.yaml
 
-    # copy yaml
-
-    - name: copy web yaml
-      copy:
-        src: k8s/web.yaml
-        dest: /home/ubuntu/k8s/web.yaml
-
-    - name: copy svc yaml
-      copy:
-        src: k8s/svc.yaml
-        dest: /home/ubuntu/k8s/svc.yaml
-
-    - name: copy ingress yaml
-      copy:
-        src: k8s/ingress.yaml
-        dest: /home/ubuntu/k8s/ingress.yaml
-
-
-    # ingress install
-
-    - name: install ingress controller
-      shell: |
-        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
-
-    - name: wait ingress
-      shell: sleep 60
-
-
-    # ✅ hostNetwork 적용 → 80포트 직접 사용
-
-    - name: patch ingress to hostNetwork
-      shell: |
-        kubectl patch deployment ingress-nginx-controller \
-          -n ingress-nginx \
-          --type=json \
-          -p='[
-            {"op":"add","path":"/spec/template/spec/hostNetwork","value":true},
-            {"op":"add","path":"/spec/template/spec/dnsPolicy","value":"ClusterFirstWithHostNet"}
-          ]'
-
-    - name: wait ingress restart
-      shell: sleep 120
-
-
-    # ✅ modsecurity enable
-
-    - name: enable modsecurity configmap
-      shell: |
-        kubectl -n ingress-nginx create configmap ingress-nginx-controller \
-          --from-literal=enable-modsecurity=true \
-          --from-literal=enable-owasp-modsecurity-crs=true \
-          --from-literal=modsecurity-snippet="SecRuleEngine On" \
-          -o yaml --dry-run=client | kubectl apply -f -
-
-
-    # webhook 문제 방지
-
-    - name: delete admission webhook
-      shell: |
-        kubectl delete ValidatingWebhookConfiguration ingress-nginx-admission || true
-
-
-    # apply web
-
-    - name: apply web
-      shell: kubectl apply -f /home/ubuntu/k8s/web.yaml
-
-    - name: apply svc
-      shell: kubectl apply -f /home/ubuntu/k8s/svc.yaml
-
-    - name: apply ingress
-      shell: kubectl apply -f /home/ubuntu/k8s/ingress.yaml
+  - name: apply web
+    shell: kubectl apply -f /home/ubuntu/web.yaml
 
 
 
 # =========================
-# IDS (Snort)
+# IDS 서버
 # =========================
 
 - hosts: ids
@@ -138,27 +77,21 @@
 
   tasks:
 
-    - name: apt update
-      apt:
-        update_cache: yes
+  - name: apt update
+    apt:
+      update_cache: yes
 
-    - name: install snort (noninteractive)
-      shell: |
-        DEBIAN_FRONTEND=noninteractive apt-get install -y snort
+  - name: install snort
+    apt:
+      name: snort
+      state: present
 
-    - name: copy rules
-      copy:
-        src: snort/local.rules
-        dest: /etc/snort/rules/local.rules
+  - name: make log dir
+    file:
+      path: /var/log/snort
+      state: directory
+      mode: 0777
 
-    - name: enable local rules
-      lineinfile:
-        path: /etc/snort/snort.conf
-        regexp: '^# include \$RULE_PATH/local.rules'
-        line: 'include $RULE_PATH/local.rules'
-
-    - name: run snort
-      shell: |
-        pkill snort || true
-        IFACE=$(ip route | grep default | awk '{print $5}')
-        snort -A console -q -c /etc/snort/snort.conf -i $IFACE &
+  - name: run snort
+    shell: |
+      nohup snort -A fast -c /etc/snort/snort.conf -i ens5 -l /var/log/snort &

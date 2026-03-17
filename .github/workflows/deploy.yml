@@ -33,8 +33,8 @@ jobs:
     - name: get ip
       run: |
         cd terraform
-        terraform output -raw public_ip > ../ip.txt
-
+        terraform output -raw server_ip > ../server_ip.txt
+        terraform output -raw ids_ip > ../ids_ip.txt
 
     - name: install ansible
       run: |
@@ -44,15 +44,20 @@ jobs:
 
     - name: setup ansible
       run: |
-        IP=$(cat ip.txt)
+ 
+        SERVER_IP=$(cat server_ip.txt)
+        IDS_IP=$(cat ids_ip.txt)
 
-        # key 생성
         echo "${{ secrets.SSH_KEY }}" > key.pem
         chmod 600 key.pem
 
-        # inventory 생성
         echo "[server]" > ansible/inventory.ini
-        echo "$IP ansible_user=ubuntu ansible_ssh_private_key_file=key.pem" >> ansible/inventory.ini
+        echo "server ansible_host=$SERVER_IP ansible_user=ubuntu ansible_ssh_private_key_file=key.pem" >> ansible/inventory.ini
+
+        echo "" >> ansible/inventory.ini
+
+        echo "[ids]" >> ansible/inventory.ini
+        echo "ids ansible_host=$IDS_IP ansible_user=ubuntu ansible_ssh_private_key_file=key.pem" >> ansible/inventory.ini
 
 
     - name: ansible run
