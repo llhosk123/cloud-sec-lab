@@ -16,44 +16,48 @@
   hosts: server
   become: yes
   tasks:
-    - name: Install K3s without Traefik
+    - name: Swap 메모리 설정 (t3.small 안정성 확보)
+      shell: |
+        fallocate -l 1G /swapfile || true
+        chmod 600 /swapfile
+        mkswap /swapfile || true
+        swapon /swapfile || true
+
+    - name: K3s 설치 (Traefik 비활성화)
       shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -
       args:
         creates: /usr/local/bin/k3s
 
-    - name: Wait for Kubeconfig
-      wait_for:
-        path: /etc/rancher/k3s/k3s.yaml
+    - name: Kubeconfig 권한 설정
+      shell: chmod 644 /etc/rancher/k3s/k3s.yaml
 
-    - name: Install Helm
-      shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-      args:
-        creates: /usr/local/bin/helm
-
-    - name: Deploy Nginx Ingress with ModSecurity
+    - name: Nginx Ingress Controller 설치 (Manifest 방식)
       shell: |
-        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-        helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-        helm repo update
-        helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-          --namespace ingress-nginx --create-namespace \
-          --set controller.config.enable-modsecurity="true" \
-          --set controller.config.enable-owasp-modsecurity-crs="true" \
-          --set controller.config.modsecurity-snippet="SecRuleEngine On\nSecAuditEngine RelevantOnly\nSecAuditLog /var/log/modsec_audit.log"
+        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
 
-    - name: Wait for Ingress Controller to be ready
-      # 웹훅 서비스가 준비될 때까지 30초 정도 기다려줍니다. (매우 중요)
+    - name: 인그레스 준비 대기
       pause:
         seconds: 30
 
-    - name: Deploy Test Web Application
+    - name: ✅ 핵심 - Webhook 삭제 및 HostNetwork 패치
+      # 80포트를 직접 사용하게 하고, 에러를 유발하는 웹훅을 제거합니다.
       shell: |
-        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-        # 1. 테스트용 앱 배포 (오타 수정: --replicate -> --replicas)
+        kubectl delete ValidatingWebhookConfiguration ingress-nginx-admission || true
+        kubectl patch deployment ingress-nginx-controller -n ingress-nginx --type=json \
+          -p='[{"op":"add","path":"/spec/template/spec/hostNetwork","value":true}]'
+
+    - name: WAF(ModSecurity) 설정 적용
+      # ConfigMap을 통해 WAF 엔진을 활성화합니다.
+      shell: |
+        kubectl -n ingress-nginx patch configmap ingress-nginx-controller \
+          --patch '{"data": {"enable-modsecurity": "true", "enable-owasp-modsecurity-crs": "true", "modsecurity-snippet": "SecRuleEngine On\nSecAuditEngine RelevantOnly\nSecAuditLog /var/log/modsec_audit.log"}}'
+
+    - name: 테스트용 웹 앱 및 Ingress 배포
+      shell: |
+        # 1. 앱 생성
         kubectl create deployment web-test --image=nginxdemos/hello:plain-text --replicas=1 || true
         kubectl expose deployment web-test --port=80 || true
-        
-        # 2. WAF가 적용된 Ingress 설정 생성 (최신 문법 반영: ingressClassName)
+        # 2. 인그레스 설정
         cat <<EOF | kubectl apply -f -
         apiVersion: networking.k8s.io/v1
         kind: Ingress
@@ -73,7 +77,7 @@
                       number: 80
         EOF
 
-# IDS: Snort 설치 및 룰 설정
+# IDS: Snort 설치 (이전과 동일)
 - name: Setup Snort IDS
   hosts: ids
   become: yes
@@ -82,13 +86,11 @@
       apt:
         name: snort
         state: present
-
     - name: Configure Snort local rules
       lineinfile:
         path: /etc/snort/rules/local.rules
         line: 'alert tcp any any -> $HOME_NET 80 (msg:"IDS Detection Test"; content:"attack-test"; sid:1000001; rev:1;)'
         create: yes
-
     - name: Start Snort Service
       shell: |
         pkill snort || true
