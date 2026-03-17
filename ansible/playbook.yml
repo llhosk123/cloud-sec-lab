@@ -47,7 +47,18 @@
         
         kubectl -n ingress-nginx patch configmap ingress-nginx-controller \
           --patch '{"data": {"enable-modsecurity": "true", "enable-owasp-modsecurity-crs": "true", "modsecurity-snippet": "SecRuleEngine On\nSecAuditEngine RelevantOnly\nSecAuditLog /var/log/modsec_audit.log"}}'
-
+    
+    - name: WAF(ModSecurity) 및 커스텀 룰 적용
+      shell: |
+        kubectl -n ingress-nginx patch configmap ingress-nginx-controller \
+          --patch '{
+            "data": {
+              "enable-modsecurity": "true", 
+              "enable-owasp-modsecurity-crs": "true", 
+              "modsecurity-snippet": "SecRuleEngine On\nSecAuditEngine RelevantOnly\nSecAuditLog /var/log/modsec_audit.log\n\n# --- Custom Rules Start ---\nSecRule ARGS \"@contains ho-seok-attack\" \"id:10005,phase:2,deny,status:403,msg:\"Hoseok Custom Block\"\"\n# --- Custom Rules End ---"
+            }
+          }'
+          
 # IDS: Snort 설치 및 룰 관리 자동화
 - name: Setup Snort IDS
   hosts: ids
