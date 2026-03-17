@@ -29,7 +29,7 @@ data "aws_ami" "ubuntu" {
 
 # 4. 보안 그룹 (기존 VPC ID 사용)
 resource "aws_security_group" "sec_sg" {
-  name        = "security-test-sg-v2" # 이름을 살짝 바꿔 충돌 방지
+  name        = "security-test-sg-v3" # 이름을 살짝 바꿔 충돌 방지
   vpc_id      = data.aws_vpc.default.id
   
   ingress {

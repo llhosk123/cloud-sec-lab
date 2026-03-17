@@ -4,14 +4,35 @@
     state: present
     update_cache: yes
 
-- name: Snort 커스텀 룰셋 배포 (Github의 파일을 서버로 복사)
+- name: 현재 서버의 활성 네트워크 인터페이스 이름 가져오기
+  set_fact:
+    ansible_interface_name: "{{ ansible_default_ipv4.interface }}"
+
+- name: Snort 커스텀 룰셋 배포
   template:
     src: snort.rules.j2
     dest: /etc/snort/rules/local.rules
-  notify: Restart Snort
 
-- name: Snort 서비스 실행
+# 1. 기본 서비스는 중지 (우리가 커스텀하게 띄울 것이므로)
+- name: 기본 Snort 서비스 중지
   service:
     name: snort
-    state: started
-    enabled: yes
+    state: stopped
+    enabled: no
+
+# 2. 로그 디렉토리 권한 설정 (Fluent Bit가 읽어야 하므로)
+- name: 로그 디렉토리 생성 및 권한 설정
+  file:
+    path: /var/log/snort
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+# 3. 자동 감지된 인터페이스로 Snort 실행
+- name: Snort 백그라운드 실행 (인터페이스 자동 적용)
+  shell: |
+    pkill snort || true
+    nohup snort -A fast -c /etc/snort/snort.conf -i {{ ansible_interface_name }} -l /var/log/snort > /dev/null 2>&1 &
+  async: 10
+  poll: 0
