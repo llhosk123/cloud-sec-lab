@@ -61,7 +61,7 @@ resource "aws_security_group" "sec_sg" {
 
 # 인스턴스 설정 (Ubuntu 22.04 LTS)
 resource "aws_instance" "server" {
-  ami           = "ami-04cebc8d05cc11912" # Ubuntu 22.04 LTS ap-northeast-2
+  ami           = data.aws_ami.ubuntu.id" # Ubuntu 22.04 LTS ap-northeast-2
   instance_type = "t3.small"
   key_name      = var.key_name
   vpc_security_group_ids = [aws_security_group.sec_sg.id]
@@ -70,7 +70,7 @@ resource "aws_instance" "server" {
 }
 
 resource "aws_instance" "ids" {
-  ami           = "ami-04cebc8d05cc11912"
+  ami           = data.aws_ami.ubuntu.id
   instance_type = "t3.small"
   key_name      = var.key_name
   vpc_security_group_ids = [aws_security_group.sec_sg.id]
