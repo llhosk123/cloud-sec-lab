@@ -58,13 +58,13 @@ jobs:
         mkdir -p ansible
         cat <<EOF > ansible/inventory.ini
         [server]
-        server_node ansible_host=${{ env.SERVER_IP }} ansible_user=ubuntu ansible_ssh_private_key_file=../key.pem
+        server_node ansible_host=${{ env.SERVER_IP }} ansible_user=ubuntu ansible_ssh_private_key_file=key.pem
 
         [ids]
-        ids_node ansible_host=${{ env.IDS_IP }} ansible_user=ubuntu ansible_ssh_private_key_file=../key.pem
+        ids_node ansible_host=${{ env.IDS_IP }} ansible_user=ubuntu ansible_ssh_private_key_file=key.pem
 
         [kafka]
-        kafka_node ansible_host=${{ env.KAFKA_IP }} ansible_user=ubuntu ansible_ssh_private_key_file=../key.pem
+        kafka_node ansible_host=${{ env.KAFKA_IP }} ansible_user=ubuntu ansible_ssh_private_key_file=key.pem
         EOF
 
     - name: Ansible Run (Full Deployment)
