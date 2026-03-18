@@ -20,19 +20,23 @@
           version: '3'
           services:
             zookeeper:
-              image: bitnami/zookeeper:3.9
+              # Bitnami가 아닌 Apache 공식 이미지를 사용합니다.
+              image: zookeeper:latest
               ports:
                 - "2181:2181"
-              environment:
-                - ALLOW_ANONYMOUS_LOGIN=yes
+
             kafka:
-              image: bitnami/kafka:2.13-2.8.1
+              # 가장 안정적인 wurstmeister 이미지를 사용합니다.
+              image: wurstmeister/kafka:latest
               ports:
                 - "9092:9092"
               environment:
+                # 중요: Bitnami와 설정 변수명이 다릅니다!
                 KAFKA_ADVERTISED_HOST_NAME: {{ ansible_host }}
                 KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
                 KAFKA_ADVERTISED_PORT: 9092
+                KAFKA_LOG_DIRS: /kafka/logs
+                # 테스트 편의를 위해 토픽 자동 생성 활성화
                 KAFKA_CREATE_TOPICS: "snort-logs:1:1"
               depends_on:
                 - zookeeper
