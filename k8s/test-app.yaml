@@ -28,15 +28,19 @@ spec:
   ports:
   - port: 80
     targetPort: 80
----
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: security-test-ingress
+  name: test-app-ingress
   annotations:
-    kubernetes.io/ingress.class: nginx
+    # 1. ModSecurity 엔진을 명시적으로 활성화
     nginx.ingress.kubernetes.io/enable-modsecurity: "true"
+    # 2. 실시간 차단 모드(On) 설정 및 커스텀 룰 주입
+    nginx.ingress.kubernetes.io/modsecurity-snippet: |
+      SecRuleEngine On
+      SecRule ARGS:data "@contains ho-seok-attack" "id:10005,phase:2,deny,status:403,msg:'Hoseok Custom Block'"
 spec:
+  ingressClassName: nginx
   rules:
   - http:
       paths:
@@ -44,6 +48,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: security-test-svc
+            name: test-app-service
             port:
               number: 80

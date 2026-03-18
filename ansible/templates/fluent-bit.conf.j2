@@ -13,6 +13,6 @@
 [OUTPUT]
     Name        kafka
     Match       security.logs
-    Brokers     {{ kafka_broker_ip }}:9092  # ✅ 여기서 자동으로 주입됨!
+    Brokers     {{ kafka_broker_ip }}:9092
     Topics      snort-logs
     Format      json
