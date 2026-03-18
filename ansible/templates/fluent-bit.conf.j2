@@ -9,6 +9,7 @@
     Path         {% if 'ids' in group_names %}/var/log/snort/alert{% else %}/var/log/modsec_audit.log{% endif %}
     Tag          security.logs
     Refresh_Interval 1
+    Skip_Long_Lines On
 
 [OUTPUT]
     Name        kafka

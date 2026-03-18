@@ -63,8 +63,14 @@ jobs:
     - name: ansible run
       run: |
         export ANSIBLE_HOST_KEY_CHECKING=False
-        ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
+        KAFKA_IP=$(cat kafka_ip.txt)
+        
+        # 1. Kafka 설치 먼저 (Wurstmeister 버전)
+        ansible-playbook -i ansible/inventory.ini ansible/kafka_setup.yml
 
+        # 2. Fluent Bit 설치 (IP 전달)
+        ansible-playbook -i ansible/inventory.ini ansible/fluent_bit_setup.yml \
+          -e "kafka_broker_ip=$KAFKA_IP"
 
     # ... 기존 deploy.yml 내용 하단에 추가 ...
 
