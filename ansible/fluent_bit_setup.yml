@@ -1,0 +1,23 @@
+---
+- name: Deploy Fluent Bit to WAF and IDS
+  hosts: server, ids
+  become: yes
+  tasks:
+    - name: Fluent Bit 설치 스크립트 실행
+      shell: curl https://raw.githubusercontent.com/fluent/fluent-bit/master/install.sh | sh
+      args:
+        # 이미 설치되어 있으면 다시 실행하지 않도록 설정
+        creates: /opt/fluent-bit/bin/fluent-bit
+
+    - name: Fluent Bit 설정 파일 배포 (Kafka IP 주입)
+      template:
+        src: templates/fluent-bit.conf.j2
+        dest: /etc/fluent-bit/fluent-bit.conf
+      register: fb_config
+
+    - name: Fluent Bit 서비스 시작 및 자동 실행 등록
+      service:
+        name: fluent-bit
+        state: restarted
+        enabled: yes
+      when: fb_config.changed

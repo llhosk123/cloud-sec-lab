@@ -75,3 +75,55 @@ jobs:
         # 원격 서버에서 직접 실행하도록 명령 전송
         ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$SERVER_IP \
           "sudo k3s kubectl apply -f -" < k8s/test-app.yaml
+
+    # ... (기존 terraform apply 단계까지 동일) ...
+
+    - name: get ip
+      run: |
+        cd terraform
+        terraform output -raw server_ip > ../server_ip.txt
+        terraform output -raw ids_ip > ../ids_ip.txt
+        # ✅ Kafka IP도 가져오기
+        terraform output -raw kafka_ip > ../kafka_ip.txt
+
+    - name: setup ansible
+      run: |
+        SERVER_IP=$(cat server_ip.txt)
+        IDS_IP=$(cat ids_ip.txt)
+        KAFKA_IP=$(cat kafka_ip.txt) # ✅ Kafka IP 읽기
+
+        echo "${{ secrets.SSH_KEY }}" > key.pem
+        chmod 600 key.pem
+
+        # ✅ 인벤토리에 Kafka 그룹 추가
+        cat <<EOF > ansible/inventory.ini
+        [server]
+        server_node ansible_host=$SERVER_IP ansible_user=ubuntu ansible_ssh_private_key_file=key.pem
+
+        [ids]
+        ids_node ansible_host=$IDS_IP ansible_user=ubuntu ansible_ssh_private_key_file=key.pem
+
+        [kafka]
+        kafka_node ansible_host=$KAFKA_IP ansible_user=ubuntu ansible_ssh_private_key_file=key.pem
+        EOF
+
+    - name: ansible run
+      run: |
+        export ANSIBLE_HOST_KEY_CHECKING=False
+        KAFKA_IP=$(cat kafka_ip.txt)
+        
+        # 1. 기존 WAF/IDS 설치 (Snort 등)
+        ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
+
+        # 2. Kafka 설치 (Docker-compose 실행)
+        ansible-playbook -i ansible/inventory.ini ansible/kafka_setup.yml
+
+        # 3. Fluent Bit 설치 (Kafka IP를 변수로 전달해서 자동 연동!)
+        ansible-playbook -i ansible/inventory.ini ansible/fluent_bit_setup.yml \
+          -e "kafka_broker_ip=$KAFKA_IP"
+
+    - name: Deploy Test App to K3s
+      run: |
+        SERVER_IP=$(cat server_ip.txt)
+        ssh -o StrictHostKeyChecking=no -i key.pem ubuntu@$SERVER_IP \
+          "sudo k3s kubectl apply -f -" < k8s/test-app.yaml

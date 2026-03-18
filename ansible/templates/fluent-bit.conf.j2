@@ -1,0 +1,18 @@
+[SERVICE]
+    Flush        1
+    Log_Level    info
+    Daemon       off
+
+[INPUT]
+    Name         tail
+    # IDS 그룹이면 snort 로그를, 아니면(WAF) modsec 로그를 읽습니다.
+    Path         {% if 'ids' in group_names %}/var/log/snort/alert{% else %}/var/log/modsec_audit.log{% endif %}
+    Tag          security.logs
+    Refresh_Interval 1
+
+[OUTPUT]
+    Name        kafka
+    Match       security.logs
+    Brokers     {{ kafka_broker_ip }}:9092  # ✅ 여기서 자동으로 주입됨!
+    Topics      snort-logs
+    Format      json

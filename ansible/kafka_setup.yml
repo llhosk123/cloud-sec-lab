@@ -1,0 +1,42 @@
+- name: Setup Kafka Broker
+  hosts: kafka
+  become: yes
+  tasks:
+    - name: Install Docker & Docker-Compose
+      apt:
+        name: [docker.io, docker-compose]
+        state: present
+        update_cache: yes
+
+    - name: Create Kafka Directory
+      file:
+        path: /home/ubuntu/kafka
+        state: directory
+
+    - name: Deploy Docker-Compose for Kafka
+      copy:
+        dest: /home/ubuntu/kafka/docker-compose.yml
+        content: |
+          version: '3'
+          services:
+            zookeeper:
+              image: bitnami/zookeeper:latest
+              ports:
+                - "2181:2181"
+              environment:
+                - ALLOW_ANONYMOUS_LOGIN=yes
+            kafka:
+              image: bitnami/kafka:latest
+              ports:
+                - "9092:9092"
+              environment:
+                - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+                - ALLOW_PLAINTEXT_LISTENER=yes
+                - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://{{ ansible_host }}:9092
+              depends_on:
+                - zookeeper
+
+    - name: Start Kafka Services
+      shell: docker-compose up -d
+      args:
+        chdir: /home/ubuntu/kafka
