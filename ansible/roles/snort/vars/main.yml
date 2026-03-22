@@ -1,0 +1,13 @@
+# ansible/roles/snort/vars/main.yml
+custom_rules: |
+  # [1] IP 스푸핑 탐지 (외부에서 내부 IP로 들어오는 패킷)
+  alert ip 172.31.0.0/16 any -> any any (msg:"IP Spoofing: Fake Internal IP"; sid:1000010; rev:1;)
+
+  # [2] SYN Flood (DDoS) 탐지 (5초 내에 SYN 패킷 20개 이상)
+  alert tcp any any -> any any (msg:"SYN Flood Attack Detected"; flags:S; threshold:type threshold, track by_dst, count 20, seconds 5; sid:1000011; rev:1;)
+
+  # [3] Xmas Scan 탐지 (공격용 비정상 플래그 조합)
+  alert tcp any any -> any any (msg:"TCP Xmas Scan Attempt"; flags:FPU; sid:1000012; rev:1;)
+
+  # [4] NULL Scan 탐지 (플래그가 없는 패킷)
+  alert tcp any any -> any any (msg:"TCP NULL Scan Attempt"; flags:0; sid:1000013; rev:1;)
