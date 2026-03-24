@@ -3,7 +3,7 @@ alert icmp any any -> any any (msg:"ICMP Ping Detected"; sid:1000002; rev:1;)
 alert tcp any any -> any any (msg:"IDS Detection Test"; content:"attack-test"; sid:1000001; rev:1;)
 
   # [1] IP 스푸핑 (외부에서 내부 IP로 들어오는 패킷)
-  alert ip 172.31.0.0/16 any -> any any (msg:"IP Spoofing: Fake Internal IP"; sid:1000011; rev:1;)
+  alert ip ![172.31.0.0/16] any -> 172.31.0.0/16 any (msg:"IP Spoofing: Fake Internal IP"; sid:1000011; rev:1;)
 
   # [2] SYN Flood (DDoS)  (5초 내에 SYN 패킷 20개 이상)
   alert tcp any any -> any any (msg:"SYN Flood Attack Detected"; flags:S; threshold:type threshold, track by_dst, count 20, seconds 5; sid:1000012; rev:1;)
@@ -26,7 +26,7 @@ alert tcp any any -> any any (msg:"IDS Detection Test"; content:"attack-test"; s
 
   # [8] Reverse Shell 및 원격 실행 탐지
   alert tcp any any -> any any (msg:"Possible Reverse Shell Activity"; content:"/bin/sh"; nocase; sid:1000019; rev:1;)
-  alert tcp any any -> any any (msg:"Possible Windows Remote Shell"; content:"cmd.exe"; nocase; sid:1000020; rev:1;)
+  alert ip any any -> any any (msg:"Possible Windows Remote Shell"; content:"cmd.exe"; nocase; sid:1000020; rev:1;)
 
   # [9] SQL Injection (기본 패턴) 탐지
   alert tcp any any -> any 80 (msg:"SQL Injection Attempt: OR 1=1"; content:"or 1=1"; nocase; sid:1000021; rev:1;)
