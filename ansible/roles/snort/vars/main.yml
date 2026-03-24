@@ -1,3 +1,8 @@
+# 작성법 
+#[액션] [프로토콜] [출발지 IP] [포트] [방향] [목적지 IP] [포트] (msg:"공격 탐지명"; content:"공격문구"; flags:S; sid:1000001; rev:1;)
+# alert ip 172.31.0.0/16 any -> any any (msg:"이렇게 작성"; content:"이거있으면"; flags:S(SYN 패킷); sid:1씩 증가하게 할예정; rev:1;)
+# 조건 : threshold , 대소문자 구분 X : nocase;
+
 custom_rules: |
   # [1] IP 스푸핑 (외부에서 내부 IP로 들어오는 패킷)
   alert ip 172.31.0.0/16 any -> any any (msg:"IP Spoofing: Fake Internal IP"; sid:1000011; rev:1;)

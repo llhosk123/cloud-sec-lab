@@ -67,7 +67,7 @@
 
     - name: Snort 커스텀 룰 배포 (템플릿 방식)
       template:
-        src: snort.rules.j2  # 이 파일이 ansible/templates/ 안에 있어야 함
+        src: sroles/snort/templates/nort.rules.j2  
         dest: /etc/snort/rules/local.rules
       register: rule_update
     
