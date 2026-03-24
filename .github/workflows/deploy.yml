@@ -66,8 +66,6 @@ jobs:
         ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
 
 
-    # ... 기존 deploy.yml 내용 하단에 추가 ...
-
     - name: Deploy Test App to K3s
       run: |
         SERVER_IP=$(cat server_ip.txt)
