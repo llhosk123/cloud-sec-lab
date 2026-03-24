@@ -12,6 +12,10 @@
   template:
     src: snort.rules.j2
     dest: /etc/snort/rules/local.rules
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Snort
 
 # 1. 기본 서비스는 중지 (우리가 커스텀하게 띄울 것이므로)
 - name: 기본 Snort 서비스 중지

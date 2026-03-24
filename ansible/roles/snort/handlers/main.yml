@@ -1,0 +1,6 @@
+---
+- name: Restart Snort
+  ansible.builtin.systemd:
+    name: snort
+    state: restarted
+    daemon_reload: yes
