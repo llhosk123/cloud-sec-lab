@@ -1,8 +1,3 @@
-
-# 작성법 
-#[액션] [프로토콜] [출발지 IP] [포트] [방향] [목적지 IP] [포트] (msg:"공격 탐지명"; content:"공격문구"; flags:S; sid:1000001; rev:1;)
-# alert ip 172.31.0.0/16 any -> any any (msg:"이렇게 작성"; content:"이거있으면"; flags:S(SYN 패킷); sid:1씩 증가하게 할예정; rev:1;)
-# 조건 : threshold , 대소문자 구분 X : nocase;
 custom_rules: |
   # [1] IP 스푸핑 (외부에서 내부 IP로 들어오는 패킷)
   alert ip 172.31.0.0/16 any -> any any (msg:"IP Spoofing: Fake Internal IP"; sid:1000011; rev:1;)
@@ -30,23 +25,23 @@ custom_rules: |
   alert tcp any any -> any any (msg:"Possible Reverse Shell Activity"; content:"/bin/sh"; nocase; sid:1000019; rev:1;)
   alert tcp any any -> any any (msg:"Possible Windows Remote Shell"; content:"cmd.exe"; nocase; sid:1000020; rev:1;)
 
-  [9] SQL Injection (기본 패턴) 탐지
+  # [9] SQL Injection (기본 패턴) 탐지
   alert tcp any any -> any 80 (msg:"SQL Injection Attempt: OR 1=1"; content:"or 1=1"; nocase; sid:1000021; rev:1;)
   alert tcp any any -> any 80 (msg:"SQL Injection Attempt: UNION SELECT"; content:"union select"; nocase; sid:1000022; rev:1;)
 
-  [10] 비정상 ICMP
+  # [10] 비정상 ICMP
   alert icmp any any -> any any (msg:"Suspicious Large ICMP Packet"; dsize:>100; itype:8; sid:1000023; rev:1;)
 
-  [11] port scanning (1분에 10개 이상 포트 접속)
+  # [11] port scanning (1분에 10개 이상 포트 접속)
   alert tcp any any -> any any (msg:"Potential Port Scanning Detected"; flags:S; threshold:type both, track by_src, count 10, seconds 60; sid:1000024; rev:1;)
 
-  [12] data leakage 
+  # [12] data leakage 
   alert tcp any any -> any 80 (msg:"Data Exfiltration Attempt: SELECT ALL"; content:"select * from"; nocase; sid:1000025; rev:1;)
 
-  [13] buffer overflow
-  alert ip any any -> $any any (msg:"Possible Buffer Overflow: NOP Sled Detected"; content:"|90 90 90 90 90 90 90 90|"; sid:1000027; rev:1;)
+  # [13] buffer overflow
+  alert ip any any -> any any (msg:"Possible Buffer Overflow: NOP Sled Detected"; content:"|90 90 90 90 90 90 90 90|"; sid:1000027; rev:1;)
 
-  [14] 관리자 페이지 접근 시도
+  # [14] 관리자 페이지 접근 시도
   # 환경 설정 파일(.env)에 접근하려는 시도 (자격 증명 탈취 목적)
   alert tcp any any -> any 80 (msg:"Access to Configuration File (.env)"; content:".env"; nocase; sid:1000028; rev:1;)
   # 관리자 로그인 페이지 무차별 접근

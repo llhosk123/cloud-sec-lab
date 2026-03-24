@@ -71,7 +71,7 @@
         dest: /etc/snort/rules/local.rules
       register: rule_update
     
-    - name: 🔍 Snort 룰 문법 검사 (오타 있으면 배포 중단)
+    - name: Snort 룰 문법 검사 (오타 있으면 배포 중단)
       shell: "snort -T -c /etc/snort/snort.conf"
       when: rule_update.changed
 
