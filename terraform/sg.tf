@@ -1,17 +1,16 @@
-resource "aws_security_group" "ids_sg" {
-  name        = "ids-security-group"
-  description = "Allow all inbound traffic for IDS testing"
-  vpc_id      = aws_vpc.main.id # 본인의 VPC ID 변수명
+resource "aws_security_group" "main" {
+  name_prefix = "lab-sg-testing"
 
-  # 인바운드 규칙: 모든 포트, 모든 프로토콜 개방
+  # [테스트용] 모든 인바운드 트래픽 허용 (TCP, UDP, ICMP 전체)
   ingress {
     from_port   = 0
     to_port     = 0
-    protocol    = "-1"          # -1은 모든 프로토콜(TCP, UDP, ICMP 등)을 의미합니다.
-    cidr_blocks = ["0.0.0.0/0"] # 전 세계 어디서든 접속 허용
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # 아웃바운드 규칙: 기본적으로 모두 허용
+  # 기존 22, 80, 30000-32767 포트들은 위 규칙에 모두 포함되므로 삭제해도 무방합니다.
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -20,6 +19,6 @@ resource "aws_security_group" "ids_sg" {
   }
 
   tags = {
-    Name = "ids-sg-testing"
+    Name = "lab-sg-all-open"
   }
 }
