@@ -49,8 +49,7 @@ alert tcp any any -> any any (msg:"IDS Detection Test"; content:"attack-test"; s
   alert tcp any any -> any 80 (msg:"Access to Configuration File (.env)"; content:".env"; nocase; sid:1000028; rev:1;)
   # 관리자 로그인 페이지 무차별 접근
   alert tcp any any -> any 80 (msg:"Admin Page Access Attempt"; content:"/admin"; nocase; sid:1000029; rev:1;)
-  # 포트를 22번으로 바꾸고, 프로토콜은 ip로 테스트
-  alert ip any any -> any 22 (msg:"DEBUG: CMD ON SSH PORT"; content:"cmd.exe"; nocase; sid:9999999; rev:1;)
+
 {% if custom_rules is defined %}
 {{ custom_rules }}
 {% endif %}
