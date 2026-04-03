@@ -7,52 +7,53 @@
   environment:
     DEBIAN_FRONTEND: noninteractive
 
-- name: 2. snort.conf에 명시적인 로그 출력(full, fast) 설정 추가
+- name: 2. 인터페이스 이름 자동 감지
+  set_fact:
+    ansible_interface_name: "{{ ansible_default_ipv4.interface }}"
+
+- name: 3. Snort 기본 설정 파일(/etc/default/snort)에 인터페이스 지정
+  lineinfile:
+    path: /etc/default/snort
+    regexp: '^INTERFACE='
+    line: 'INTERFACE="{{ ansible_interface_name }}"'
+  register: default_config
+
+- name: 4. snort.conf에 명시적인 로그 출력(full) 설정 추가
   blockinfile:
     path: /etc/snort/snort.conf
     marker: "# {mark} ANSIBLE MANAGED BLOCK - LOGGING CONFIG"
     insertafter: EOF
     content: |
-      # 전체 로그 (alert_full)
       output alert_full: snort.alert
-      # IPS 스크립트가 읽을 실시간 요약 로그 (alert_fast)
-      output alert_fast: snort.alert.fast
   register: config_updated
 
-- name: 3. 로그 디렉토리 권한 설정 (snort:snort, 700)
+- name: 5. 로그 디렉토리 및 내부 파일 전체 권한 강제 설정 (핵심 해결책)
   file:
     path: /var/log/snort
     state: directory
-    owner: snort  # ubuntu에서 snort로 변경
-    group: snort  # ubuntu에서 snort로 변경
-    mode: '0700'  # 755에서 700으로 변경
+    owner: snort
+    group: snort
+    mode: '0700'
+    recurse: yes
 
-- name: 4. 인터페이스 이름 자동 감지
-  set_fact:
-    ansible_interface_name: "{{ ansible_default_ipv4.interface }}"
-
-- name: 5. Snort 커스텀 룰 배포
+- name: 6. Snort 커스텀 룰 배포
   template:
     src: snort.rules.j2
     dest: /etc/snort/rules/local.rules
   register: rule_update
 
-- name: 6. Snort 룰 문법 검사
+- name: 7. Snort 룰 문법 검사
   shell: "snort -T -c /etc/snort/snort.conf"
   when: rule_update.changed or config_updated.changed
 
-- name: 7. 현재 Snort 프로세스 확인
-  shell: pgrep snort
-  register: snort_status
-  ignore_errors: yes
-  changed_when: false
+- name: 8. Snort 서비스 재시작 (systemctl restart)
+  systemd:
+    name: snort
+    state: restarted
+    enabled: yes
+  # 위에서 선언한 변수명들로 정확히 매칭
+  when: rule_update.changed or config_updated.changed or default_config.changed
 
-- name: 8. Snort 재시작 (설정/권한 변경 시 실행)
-  shell: |
-    pkill snort || true
-    # 💡 핵심 수정: -A fast 옵션을 제거하여 snort.conf의 설정을 따르도록 함
-    nohup snort -q -u snort -g snort -c /etc/snort/snort.conf -i {{ ansible_interface_name }} -l /var/log/snort > /dev/null 2>&1 &
-  when: rule_update.changed or config_updated.changed or snort_status.rc != 0
 - name: 9. IPS 스크립트 디렉토리 생성
   file:
     path: /home/ubuntu/ips
@@ -69,16 +70,14 @@
     mode: '0755'
     content: |
       #!/bin/bash
-      # Snort가 생성하는 로그 파일 경로
       LOGFILE="/var/log/snort/snort.alert.fast"
-      BLOCKED_IPS="/home/ubuntu/ips/blocked_ips.txt"
-      touch "$BLOCKED_IPS"
-      
-      EXCLUDE_IPS=("192.168.100.20" "52.78.76.224" "127.0.0.1") # 예시 IP
+      EXCLUDE_IPS=("192.168.100.20" "52.78.76.224" "192.168.110.229" "192.168.110.215" "192.168.110.40" "192.168.110.10" "192.168.100.10" "43.202.237.187" "192.168.120.10" "127.0.0.1" "124.58.76.122" "180.224.83.39" "211.243.114.16" "59.16.17.51" "218.155.95.111" "211.195.111.228" "218.147.184.245")
 
-      echo "[IPS 시작] 로그 모니터링 중: $LOGFILE"
+      echo "------------------------------------------------"
+      echo "  [침입 차단 시스템 가동 중] (실시간 조회 모드)"
+      echo "------------------------------------------------"
 
-      # 로그 파일이 생성될 때까지 대기 (파일이 없으면 tail 에러 방지)
+      # 💡 로그 파일이 생성될 때까지 대기 (tail 에러 방지)
       until [ -f "$LOGFILE" ]; do sleep 1; done
 
       stdbuf -oL tail -n 100 -F "$LOGFILE" | while read line; do
@@ -87,10 +86,35 @@
               IP=$(echo "$line" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
 
               if [ -n "$IP" ]; then
-                  # 관리자 IP 체크 로직 생략(위와 동일)
-                  sudo iptables -I INPUT -s "$IP" -j DROP
-                  echo "$IP" >> "$BLOCKED_IPS"
-                  echo "🚫 차단 완료: $IP (사유: $REASON)"
+                  # 1. 관리자 IP 예외 처리
+                  IS_ADMIN=false
+                  for admin_ip in "${EXCLUDE_IPS[@]}"; do
+                      if [ "$IP" == "$admin_ip" ]; then
+                          IS_ADMIN=true
+                          break
+                      fi
+                  done
+
+                  if [ "$IS_ADMIN" = true ]; then
+                      echo "⚠️  [제외] 관리자 IP 감지: $IP"
+                      echo "      => 탐지명: $REASON"
+                      echo "------------------------------------------------"
+                  
+                  # 2. iptables에 해당 IP가 이미 차단되어 있는지 확인 (-C 옵션)
+                  elif sudo iptables -C INPUT -s "$IP" -j DROP 2>/dev/null; then
+                      echo "ℹ️  [중복] 이미 차단된 IP입니다: $IP"
+                      echo "      => 탐지명: $REASON"
+                      echo "      => 조치: 추가 차단 생략"
+                      echo "------------------------------------------------"
+                  
+                  # 3. 중복되지 않은 경우 신규 차단 실행
+                  else
+                      sudo iptables -I INPUT -s "$IP" -j DROP
+                      echo "🚫 [차단] 신규 공격 IP 감지: $IP"
+                      echo "      => 탐지명: $REASON"
+                      echo "      => 조치: iptables DROP 등록 완료"
+                      echo "------------------------------------------------"
+                  fi
               fi
           fi
       done
