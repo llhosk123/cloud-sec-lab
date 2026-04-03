@@ -38,27 +38,25 @@
     dest: /etc/snort/rules/local.rules
   register: rule_update
 
-# 💡 [순서 변경] 문법 검사를 먼저 실행 (이때 root 소유의 파일이 몰래 생성됨)
 - name: 7. Snort 룰 문법 검사
   shell: "snort -T -c /etc/snort/snort.conf"
   when: rule_update.changed or snort_conf.changed
 
-# 💡 [순서 변경] 검사가 끝난 후, 생성된 모든 파일을 snort 소유로 덮어씌움!
-- name: 8. 로그 디렉토리 및 내부 파일 권한 최종 강제 설정
-  file:
-    path: /var/log/snort
-    state: directory
-    owner: snort
-    group: snort
-    mode: '0700'
-    recurse: yes
+# 💡 [여기가 핵심입니다!] Snort가 켜지기 전에 우리가 먼저 빈 파일을 만들고 주인을 snort로 도장 찍어버립니다.
+- name: 8. 로그 파일 미리 생성 및 소유권 강제 고정 (Snort 자체 버그 우회)
+  shell: |
+    touch /var/log/snort/snort.alert
+    touch /var/log/snort/snort.alert.fast
+    touch /var/log/snort/snort.log
+    chown -R snort:snort /var/log/snort
+    chmod -R 700 /var/log/snort
 
 - name: 9. Snort 서비스 재시작 (systemctl restart)
   systemd:
     name: snort
     state: restarted
     enabled: yes
-  when: rule_update.changed or snort_conf.changed or default_config.changed
+  # 무조건 재시작하면서 권한 적용받게 임시로 when 제거 (테스트용)
 
 - name: 10. IPS 스크립트 디렉토리 생성
   file:
@@ -101,21 +99,11 @@
 
                   if [ "$IS_ADMIN" = true ]; then
                       echo "⚠️  [제외] 관리자 IP 감지: $IP"
-                      echo "      => 탐지명: $REASON"
-                      echo "------------------------------------------------"
-
                   elif sudo iptables -C INPUT -s "$IP" -j DROP 2>/dev/null; then
                       echo "ℹ️  [중복] 이미 차단된 IP입니다: $IP"
-                      echo "      => 탐지명: $REASON"
-                      echo "      => 조치: 추가 차단 생략"
-                      echo "------------------------------------------------"
-                  
                   else
                       sudo iptables -I INPUT -s "$IP" -j DROP
                       echo "🚫 [차단] 신규 공격 IP 감지: $IP"
-                      echo "      => 탐지명: $REASON"
-                      echo "      => 조치: iptables DROP 등록 완료"
-                      echo "------------------------------------------------"
                   fi
               fi
           fi
