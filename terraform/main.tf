@@ -54,16 +54,7 @@ resource "aws_security_group" "sec_sg" {
   }
 }
 
-# 5. EC2 인스턴스 (Server: K3s + WAF)
-resource "aws_instance" "server" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.small"
-  key_name               = var.key_name
-  vpc_security_group_ids = [aws_security_group.sec_sg.id]
-  # 첫 번째 기본 서브넷 사용
-  subnet_id              = data.aws_subnets.default.ids[0]
-  tags                   = { Name = "WAF-Server" }
-}
+
 
 # 6. EC2 인스턴스 (IDS: Snort)
 resource "aws_instance" "ids" {
