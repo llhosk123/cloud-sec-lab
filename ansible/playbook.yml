@@ -54,39 +54,5 @@
 - name: Setup Snort IDS
   hosts: ids
   become: yes
-  tasks:
-    - name: Install Snort
-      apt:
-        name: snort
-        state: present
-        update_cache: yes
-
-    - name: 인터페이스 이름 자동 감지
-      set_fact:
-        ansible_interface_name: "{{ ansible_default_ipv4.interface }}"
-
-    - name: Snort 커스텀 룰 배포 (템플릿 방식)
-      template:
-        src: roles/snort/templates/snort.rules.j2  
-        dest: /etc/snort/rules/local.rules
-      register: rule_update
-    
-    - name: Snort 룰 문법 검사 (오타 있으면 배포 중단)
-      shell: "snort -T -c /etc/snort/snort.conf"
-      when: rule_update.changed
-
-    - name: 로그 디렉토리 권한 설정
-      file:
-        path: /var/log/snort
-        state: directory
-        owner: ubuntu
-        group: ubuntu
-        mode: '0755'
-
-    - name: Snort 실행/재시작
-      shell: |
-        pkill snort || true
-        # -A fast: 파일에 로그 기록 (Kafka 전송용)
-        nohup snort -q -A fast -c /etc/snort/snort.conf -i {{ ansible_interface_name }} -l /var/log/snort &
-      # 룰이 바뀌었거나 프로세스가 없을 때만 실행
-      when: rule_update.changed or (ansible_facts.services is not defined)
+  roles:
+    - snort
