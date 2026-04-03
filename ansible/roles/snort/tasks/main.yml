@@ -7,12 +7,16 @@
   environment:
     DEBIAN_FRONTEND: noninteractive
 
-- name: 2. snort.conf 파일 맨 밑에 alert_full 출력 설정 추가
-  lineinfile:
+- name: 2. snort.conf에 명시적인 로그 출력(full, fast) 설정 추가
+  blockinfile:
     path: /etc/snort/snort.conf
-    line: 'output alert_full: /var/log/snort/snort.alert'
-    insertafter: EOF  # 파일 맨 끝에 추가
-    state: present
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - LOGGING CONFIG"
+    insertafter: EOF
+    content: |
+      # 전체 로그 (alert_full)
+      output alert_full: snort.alert
+      # IPS 스크립트가 읽을 실시간 요약 로그 (alert_fast)
+      output alert_fast: snort.alert.fast
   register: config_updated
 
 - name: 3. 로그 디렉토리 권한 설정 (snort:snort, 700)
@@ -46,11 +50,9 @@
 - name: 8. Snort 재시작 (설정/권한 변경 시 실행)
   shell: |
     pkill snort || true
-    # -A fast는 snort.alert.fast를 만들고, 
-    # conf의 output alert_full은 snort.alert를 만듭니다.
-    nohup snort -q -A fast -c /etc/snort/snort.conf -i {{ ansible_interface_name }} -l /var/log/snort > /dev/null 2>&1 &
+    # 💡 핵심 수정: -A fast 옵션을 제거하여 snort.conf의 설정을 따르도록 함
+    nohup snort -q -u snort -g snort -c /etc/snort/snort.conf -i {{ ansible_interface_name }} -l /var/log/snort > /dev/null 2>&1 &
   when: rule_update.changed or config_updated.changed or snort_status.rc != 0
-
 - name: 9. IPS 스크립트 디렉토리 생성
   file:
     path: /home/ubuntu/ips
