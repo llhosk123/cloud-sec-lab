@@ -7,27 +7,33 @@
   environment:
     DEBIAN_FRONTEND: noninteractive
 
-- name: 2. 인터페이스 이름 자동 감지
+# 💡 [추가됨] 권한 충돌을 일으키는 좀비 프로세스와 쓰레기 파일 강제 청소
+- name: 2. [복구] 기존 꼬인 프로세스 및 파일 강제 정리 (Clean Up)
+  shell: |
+    pkill -9 snort || true
+    rm -f /var/log/snort/*
+  failed_when: false
+
+- name: 3. 인터페이스 이름 자동 감지
   set_fact:
     ansible_interface_name: "{{ ansible_default_ipv4.interface }}"
 
-- name: 3. Snort 기본 설정 파일(/etc/default/snort)에 인터페이스 지정
+- name: 4. Snort 기본 설정 파일(/etc/default/snort)에 인터페이스 지정
   lineinfile:
     path: /etc/default/snort
     regexp: '^INTERFACE='
     line: 'INTERFACE="{{ ansible_interface_name }}"'
   register: default_config
 
-- name: 4. snort.conf에 명시적인 로그 출력(full) 설정 추가
-  blockinfile:
+- name: 5. snort.conf에 alert_full 출력 설정 추가
+  lineinfile:
     path: /etc/snort/snort.conf
-    marker: "# {mark} ANSIBLE MANAGED BLOCK - LOGGING CONFIG"
+    line: 'output alert_full: snort.alert'
     insertafter: EOF
-    content: |
-      output alert_full: snort.alert
-  register: config_updated
+    state: present
+  register: snort_conf
 
-- name: 5. 로그 디렉토리 및 내부 파일 전체 권한 강제 설정 (핵심 해결책)
+- name: 6. 로그 디렉토리 및 내부 파일 권한 강제 설정 (소유권 문제 해결)
   file:
     path: /var/log/snort
     state: directory
@@ -36,25 +42,31 @@
     mode: '0700'
     recurse: yes
 
-- name: 6. Snort 커스텀 룰 배포
+- name: 7. Snort 커스텀 룰 배포 (템플릿 방식)
   template:
     src: snort.rules.j2
     dest: /etc/snort/rules/local.rules
   register: rule_update
 
-- name: 7. Snort 룰 문법 검사
+# 💡 [수정됨] 변수명 오타(config_updated -> snort_conf) 수정
+- name: 8. Snort 룰 문법 검사
   shell: "snort -T -c /etc/snort/snort.conf"
-  when: rule_update.changed or config_updated.changed
+  when: rule_update.changed or snort_conf.changed
 
-- name: 8. Snort 서비스 재시작 (systemctl restart)
+- name: 9. 현재 Snort 프로세스 확인
+  shell: pgrep snort
+  register: snort_status
+  ignore_errors: yes
+  changed_when: false
+
+- name: 10. Snort 서비스 재시작 (systemctl restart)
   systemd:
     name: snort
     state: restarted
     enabled: yes
-  # 위에서 선언한 변수명들로 정확히 매칭
-  when: rule_update.changed or config_updated.changed or default_config.changed
+  when: rule_update.changed or snort_conf.changed or default_config.changed
 
-- name: 9. IPS 스크립트 디렉토리 생성
+- name: 11. IPS 스크립트 디렉토리 생성
   file:
     path: /home/ubuntu/ips
     state: directory
@@ -62,7 +74,7 @@
     group: ubuntu
     mode: '0755'
 
-- name: 10. ips_deny.sh 스크립트 배포
+- name: 12. ips_deny.sh 스크립트 배포
   copy:
     dest: /home/ubuntu/ips/ips_deny.sh
     owner: ubuntu
@@ -77,7 +89,7 @@
       echo "  [침입 차단 시스템 가동 중] (실시간 조회 모드)"
       echo "------------------------------------------------"
 
-      # 💡 로그 파일이 생성될 때까지 대기 (tail 에러 방지)
+      # 💡 [추가됨] Snort가 켜지고 파일을 만들 때까지 대기 (tail 에러 방지)
       until [ -f "$LOGFILE" ]; do sleep 1; done
 
       stdbuf -oL tail -n 100 -F "$LOGFILE" | while read line; do
@@ -99,7 +111,7 @@
                       echo "⚠️  [제외] 관리자 IP 감지: $IP"
                       echo "      => 탐지명: $REASON"
                       echo "------------------------------------------------"
-                  
+
                   # 2. iptables에 해당 IP가 이미 차단되어 있는지 확인 (-C 옵션)
                   elif sudo iptables -C INPUT -s "$IP" -j DROP 2>/dev/null; then
                       echo "ℹ️  [중복] 이미 차단된 IP입니다: $IP"
