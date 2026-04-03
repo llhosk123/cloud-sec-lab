@@ -67,5 +67,5 @@ resource "aws_instance" "ids" {
 }
 
 # Outputs
-output "server_ip" { value = aws_instance.server.public_ip }
+2
 output "ids_ip"    { value = aws_instance.ids.public_ip }
